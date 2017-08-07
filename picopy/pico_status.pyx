@@ -4,15 +4,23 @@ from pico_status cimport *
 
 cpdef check_status(unsigned long status_code):
 
-    if status_code != PICO_OK:
+    if status_code == PICO_OK:
+        pass
+    elif status_code == PICO_WARNING_REPEAT_VALUE:
+        pass
+    else:
         raise PicoError(status_code)
 
 class PicoError(Exception):
     def __init__(self, status_code):
         self.status_code = status_code
 
-        self.status_code_str = status_code_lookup[status_code][0]
-        self.status_str = status_code_lookup[status_code][1]
+        try:
+            self.status_code_str = status_code_lookup[status_code][0]
+            self.status_str = status_code_lookup[status_code][1]
+        except KeyError:
+            self.status_code_str = 'ERROR ' + str(status_code)
+            self.status_str = 'Unknown error (lookup the 5k docs)'
 
     def __str__(self):
         return '%s: %s' % (self.status_code_str, self.status_str)
@@ -21,16 +29,16 @@ class PicoError(Exception):
 status_code_lookup = {
         PICO_OK: (
             'PICO_OK',
-            'The PicoScope 3000A is functioning correctly'),
+            'The PicoScope is functioning correctly'),
         PICO_MAX_UNITS_OPENED: (
             'PICO_MAX_UNITS_OPENED',
-            'An attempt has been made to open more than PS3000A_MAX_UNITS.'),
+            'An attempt has been made to open more than MAX_UNITS.'),
         PICO_MEMORY_FAIL: (
             'PICO_MEMORY_FAIL',
             'Not enough memory could be allocated on the host machine'),
         PICO_NOT_FOUND: (
             'PICO_NOT_FOUND',
-            'No PicoScope 3000A could be found'),
+            'No PicoScope could be found'),
         PICO_FW_FAIL: (
             'PICO_FW_FAIL',
             'Unable to download firmware'),
@@ -42,11 +50,11 @@ status_code_lookup = {
             ''),
         PICO_NOT_RESPONDING: (
             'PICO_NOT_RESPONDING',
-            'The PicoScope 3000A is not responding to commands from the '
+            'The PicoScope is not responding to commands from the '
             'PC'),
         PICO_CONFIG_FAIL: (
             'PICO_CONFIG_FAIL',
-            'The configuration information in the PicoScope 3000A has '
+            'The configuration information in the PicoScope has '
             'become corrupt or is missing'),
         PICO_KERNEL_DRIVER_TOO_OLD: (
             'PICO_KERNEL_DRIVER_TOO_OLD',
@@ -137,14 +145,14 @@ status_code_lookup = {
             'One or more of the conditions are incorrect'),
         PICO_USER_CALLBACK: (
             'PICO_USER_CALLBACK',
-            'The driver\'s thread is currently in the ps3000a...Ready '
+            'The driver\'s thread is currently in the Ready '
             'callback function and therefore the action cannot be carried '
             'out'),
         PICO_DEVICE_SAMPLING: (
             'PICO_DEVICE_SAMPLING',
             'An attempt is being made to get stored data while streaming.  '
-            'Either stop streaming by calling ps3000aStop, or use '
-            'ps3000aGetStreamingLatestValues'),
+            'Either stop streaming by calling Stop, or use '
+            'GetStreamingLatestValues'),
         PICO_NO_SAMPLES_AVAILABLE: (
             'PICO_NO_SAMPLES_AVAILABLE',
             'No samples available because a run has not been completed'),
@@ -224,7 +232,7 @@ status_code_lookup = {
             ''),
         PICO_INVALID_COUPLING: (
             'PICO_INVALID_COUPLING',
-            'An invalid coupling type was specified in ps3000aSetChannel'),
+            'An invalid coupling type was specified in SetChannel'),
         PICO_BUFFERS_NOT_SET: (
             'PICO_BUFFERS_NOT_SET',
             'An attempt was made to get data before a data buffer was '
@@ -235,14 +243,14 @@ status_code_lookup = {
             'not allowed'),
         PICO_INVALID_TRIGGER_PROPERTY: (
             'PICO_INVALID_TRIGGER_PROPERTY',
-            'An invalid parameter was passed to ps3000aSetTriggerChannelProperties'),
+            'An invalid parameter was passed to SetTriggerChannelProperties'),
         PICO_INTERFACE_NOT_CONNECTED: (
             'PICO_INTERFACE_NOT_CONNECTED',
             'The driver was unable to contact the oscilloscope'),
         PICO_SIGGEN_WAVEFORM_SETUP_FAILED: (
             'PICO_SIGGEN_WAVEFORM_SETUP_FAILED',
-            'A problem occurred in ps3000aSetSigGenBuiltIn or '
-            'ps3000aSetSigGenArbitrary'),
+            'A problem occurred in SetSigGenBuiltIn or '
+            'SetSigGenArbitrary'),
         PICO_FPGA_FAIL: (
             'PICO_FPGA_FAIL',
             ''),
@@ -252,10 +260,10 @@ status_code_lookup = {
         PICO_INVALID_ANALOGUE_OFFSET: (
             'PICO_INVALID_ANALOGUE_OFFSET',
             'An impossible analogue offset value was specified in '
-            'ps3000aSetChannel'),
+            'SetChannel'),
         PICO_PLL_LOCK_FAILED: (
             'PICO_PLL_LOCK_FAILED',
-            'Unable to configure the PicoScope 3000A'),
+            'Unable to configure the PicoScope'),
         PICO_ANALOG_BOARD: (
             'PICO_ANALOG_BOARD',
             'The oscilloscope\'s analog board is not detected, or is not '
