@@ -1,66 +1,48 @@
-# Copyright 2012 Knowledge Economy Developments Ltd
-#
-# Henry Gomersall
-# heng@kedevelopments.co.uk
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 2 of the License, or
-# (at your option) any later version.
-# 
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-# 
-# You should have received a copy of the GNU General Public License
-# along with this program; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-#
-
-from distutils.core import setup
+from setuptools import setup
 from distutils.extension import Extension
-from distutils.util import get_platform
-
+from Cython.Distutils import build_ext as build_ext
 import os
 import numpy
 
-
-include_dirs = [numpy.get_include()]
-library_dirs = []
-package_data = {}
-
-if get_platform() == 'win32':
-    libraries = ['PS3000a']
-    include_dirs.append('picopy')
-    library_dirs.append(os.path.join(os.getcwd(),'picopy'))
-else:
-    libraries = ['ps3000a', 'usb_pico-1.0']
-
+include_dirs = ['./include', numpy.get_include()]
+package_data = {'picopy' : ['PS5000a.dll', 'PicoIpp.dll', 'PS5000a.lib',
+                'PS4000.dll', 'PS4000.lib', 'PS3000a.dll', 'PS3000a.lib',
+                'USBPT104.dll', 'USBPT104.lib']}
 
 ext_modules = [
+        Extension('picopy.pico5k',
+            sources=['picopy/pico5k.pyx'],
+            libraries=['PS5000a'],
+            include_dirs=include_dirs,
+            library_dirs=['./include']),
+        Extension('picopy.pico4k',
+            sources=['picopy/pico4k.pyx'],
+            libraries=['PS4000'],
+            include_dirs=include_dirs,
+            library_dirs=['./include']),
         Extension('picopy.pico3k',
-            sources=[os.path.join('picopy', 'pico3k.c')],
-            libraries=libraries,
-            library_dirs=library_dirs),
-    Extension(
+            sources=['picopy/pico3k.pyx'],
+            libraries=['PS3000a'],
+            include_dirs=include_dirs,
+            library_dirs=['./include']),
+        Extension('picopy.pt104',
+            sources=['picopy/pt104.pyx'],
+            libraries=['usbpt104'],
+            include_dirs=include_dirs,
+            library_dirs=['./include']),
+        Extension(
             'picopy.pico_status',
-            sources = [os.path.join('picopy', 'pico_status.c')], 
-            include_dirs = ['picopy'])]
-
-version = '0.0.1'
-
-long_description = '''
-'''
-
+            sources = ['picopy/pico_status.pyx'], 
+            include_dirs=include_dirs)]
+        
 setup_args = {
         'name': 'PicoPy',
-        'version': version,
+        'version': '0.0.1',
         'author': 'Henry Gomersall',
         'author_email': 'heng@kedevelopments.co.uk',
-        'description': 'A pythonic wrapper around the PicoScope (3000 series) API.',
+        'description': 'A pythonic wrapper around the PicoScope (3000 to 5000 series) API.',
         'url': 'http://hgomersall.github.com/PicoPy/',
-        'long_description': long_description,
+        'long_description': '',
         'classifiers': [
             'Programming Language :: Python',
             'Programming Language :: Python :: 3',
@@ -75,6 +57,7 @@ setup_args = {
         'ext_modules': ext_modules,
         'include_dirs': include_dirs,
         'package_data': package_data,
+        'cmdclass': {'build_ext': build_ext},
   }
 
 if __name__ == '__main__':
