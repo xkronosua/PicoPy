@@ -454,7 +454,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 		_buffer = <short *>np.PyArray_DATA(channel_array[0, :])
 
 		with nogil:
-			status = ps3000aSetDataBuffer(handle, _channel, _buffer,
+				status = ps3000aSetDataBuffer(handle, _channel, _buffer,
 					_samples, segment_index, PS3000A_RATIO_MODE_NONE)
 
 		check_status(status)
@@ -552,8 +552,8 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 		with nogil:
 			for i in range(number_of_captures):
 				_single_capture_buffer = _buffer + i*_samples
-				status = ps3000aSetDataBuffer(handle, _channel, _buffer,
-					_samples, segment_index, PS3000A_RATIO_MODE_NONE)
+				status = ps3000aSetDataBuffer(handle, _channel, _single_capture_buffer,
+					_samples, i, PS3000A_RATIO_MODE_NONE)
 
 		check_status(status)
 
