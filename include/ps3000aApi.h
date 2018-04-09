@@ -1,12 +1,12 @@
 /****************************************************************************
  *
  * Filename:    ps3000aApi.h
- * Copyright:   Pico Technology Limited 2010
+ * Copyright:   Pico Technology Limited 2010 - 2017
  * Author:      MAS
  * Description:
  *
  * This header defines the interface to driver routines for the 
- *    PicoScope3000a series of PC Oscilloscopes.
+ *    PicoScope3000a series of PC Oscilloscopes.    
  *
  ****************************************************************************/
 #ifndef __PS3000AAPI_H__

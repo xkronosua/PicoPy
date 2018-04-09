@@ -6,8 +6,7 @@ import numpy
 
 include_dirs = ['./include', numpy.get_include()]
 package_data = {'picopy' : ['PS5000a.dll', 'PicoIpp.dll', 'PS5000a.lib',
-                'PS4000.dll', 'PS4000.lib', 'PS3000a.dll', 'PS3000a.lib',
-                'USBPT104.dll', 'USBPT104.lib']}
+                'PS4000.dll', 'PS4000.lib', 'PS3000a.dll', 'PS3000a.lib']}
 
 ext_modules = [
         Extension('picopy.pico5k',
@@ -23,11 +22,6 @@ ext_modules = [
         Extension('picopy.pico3k',
             sources=['picopy/pico3k.pyx'],
             libraries=['PS3000a'],
-            include_dirs=include_dirs,
-            library_dirs=['./include']),
-        Extension('picopy.pt104',
-            sources=['picopy/pt104.pyx'],
-            libraries=['usbpt104'],
             include_dirs=include_dirs,
             library_dirs=['./include']),
         Extension(

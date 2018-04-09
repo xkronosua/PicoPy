@@ -1,0 +1,17 @@
+README.md
+setup.py
+PicoPy.egg-info/PKG-INFO
+PicoPy.egg-info/SOURCES.txt
+PicoPy.egg-info/dependency_links.txt
+PicoPy.egg-info/top_level.txt
+picopy/__init__.py
+picopy/frozendict.py
+picopy/logic.py
+picopy/pico3k.pyx
+picopy/pico4k.pyx
+picopy/pico5k.pyx
+picopy/pico_status.pyx
+picopy/qm.py
+picopy/triggers.py
+test/test_logic_parser.py
+test/test_pico.py

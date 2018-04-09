@@ -1,0 +1,18 @@
+Metadata-Version: 1.1
+Name: PicoPy
+Version: 0.0.1
+Summary: A pythonic wrapper around the PicoScope (3000 to 5000 series) API.
+Home-page: http://hgomersall.github.com/PicoPy/
+Author: Henry Gomersall
+Author-email: heng@kedevelopments.co.uk
+License: UNKNOWN
+Description: UNKNOWN
+Platform: UNKNOWN
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3
+Classifier: Development Status :: 3 - Alpha
+Classifier: License :: OSI Approved :: GNU General Public License (GPL)
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering

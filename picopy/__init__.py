@@ -24,7 +24,6 @@ from . import pico_status
 from .pico3k import Pico3k
 from .pico4k import Pico4k    
 from .pico5k import Pico5k
-from .pt104  import Pt104
 
 from .triggers import (
         EdgeTrigger,

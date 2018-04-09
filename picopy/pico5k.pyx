@@ -7,16 +7,16 @@
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 2 of the License, or
 # (at your option) any later version.
-# 
+#
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-# 
+#
 
 from .pico_status cimport check_status
 from .pico_status import PicoError
@@ -39,14 +39,14 @@ from cpython.mem cimport PyMem_Malloc, PyMem_Free
 
 capability_dict = frozendict({
     b'5443B': frozendict({
-        'channels': 4, 
+        'channels': 4,
         'max_sampling_rate': {'DR_8BIT':['invalid', 1e9, 5e8, 2.5e8, 2.5e8],
                               'DR_12BIT':['invalid', 5e9, 2.5e8, 1.25e8, 1.25e8],
                               'DR_14BIT':['invalid', 1.25e8, 1.25e8, 1.25e8, 1.25e8],
                               'DR_15BIT':['invalid', 1.25e8, 1.25e8, 'invalid', 'invalid'],
                               'DR_16BIT':['invalid', 6.25e7, 'invalid', 'invalid', 'invalid']}
                         })
-                            }) 
+                            })
 
 channel_dict = frozendict({
     'A': PS5000A_CHANNEL_A,
@@ -89,7 +89,7 @@ voltage_range_values = frozendict({
     PS5000A_10V: 10.0,
     PS5000A_20V: 20.0,
 	PS5000A_50V: 50.0})
-	
+
 resolution_dict = frozendict({
 	"DR_8BIT" : PS5000A_DR_8BIT,
 	"DR_12BIT" : PS5000A_DR_12BIT,
@@ -176,7 +176,7 @@ cdef open_unit(char *serial_str, resolution):
     cdef PICO_STATUS status
     cdef short handle
     cdef PS5000A_DEVICE_RESOLUTION _resolution = resolution_dict[resolution]
-	
+
     with nogil:
         status = ps5000aOpenUnit(&handle, serial_str, _resolution)
     check_status(status)
@@ -187,7 +187,7 @@ cdef open_unit(char *serial_str, resolution):
 
 cdef close_unit(short handle):
     cdef PICO_STATUS status
-    
+
     with nogil:
         status = ps5000aCloseUnit(handle)
 
@@ -200,19 +200,19 @@ cdef get_unit_info(short handle, PICO_INFO info):
     cdef short required_n
 
     cdef bytes py_info_str
-    
+
     cdef PICO_STATUS status
 
     with nogil:
         status = ps5000aGetUnitInfo(handle, info_str, n, &required_n, info)
     check_status(status)
-    
+
     # Make sure we had a big enough string
     if required_n > n:
         PyMem_Free(info_str)
         n = required_n
         info_str = <char *>PyMem_Malloc(sizeof(char)*(n))
-        
+
         with nogil:
             status = ps5000aGetUnitInfo(
                     handle, info_str, n, &required_n, info)
@@ -229,18 +229,18 @@ cdef get_sample_limits(short handle):
 
     cdef short min_val
     cdef short max_val
-    
+
     with nogil:
        status = ps5000aMinimumValue(handle, &min_val)
     check_status(status)
-    
+
     with nogil:
        status = ps5000aMaximumValue(handle, &max_val)
     check_status(status)
-    
+
     return (min_val, max_val)
 
-cdef set_channel(short handle, channel, bint enable, 
+cdef set_channel(short handle, channel, bint enable,
         voltage_range, channel_type, float analogue_offset):
 
     cdef PICO_STATUS status
@@ -255,7 +255,7 @@ cdef set_channel(short handle, channel, bint enable,
 
     check_status(status)
 
-cdef get_timebase(short handle, unsigned long timebase_index, 
+cdef get_timebase(short handle, unsigned long timebase_index,
         long no_samples, unsigned short segment_index):
 
     cdef float time_interval
@@ -263,7 +263,7 @@ cdef get_timebase(short handle, unsigned long timebase_index,
     cdef PICO_STATUS status
 
     with nogil:
-        status = ps5000aGetTimebase2(handle, timebase_index, no_samples, 
+        status = ps5000aGetTimebase2(handle, timebase_index, no_samples,
                 &time_interval, &max_samples, segment_index)
 
     check_status(status)
@@ -279,31 +279,31 @@ cdef get_minimum_timebase_index(active_channels, max_sampling_rate):
         raise RuntimeError('Invalid number of channels enabled for'
                            ' selected device resolution')
     else:
-        return int(round(math.log(1e9/max_rate, 2)))    
+        return int(round(math.log(1e9/max_rate, 2)))
 
 cdef unsigned long compute_timebase_index(
-        float sampling_period, max_sampling_rate, 
+        float sampling_period, max_sampling_rate,
         int active_channels, resolution):
     '''Round the sampling period to the nearest valid sampling period and
     return the timebase index to which the sampling period corresponds.
     '''
 
-    cdef unsigned long timebase_index_low 
+    cdef unsigned long timebase_index_low
     cdef unsigned long timebase_index
-      
+
     max_rate = max_sampling_rate[active_channels]
     if max_rate == 'invalid':
         raise RuntimeError('Invalid number of channels enabled for'
                            ' selected device resolution')
     else:
         min_sample_period = 1/max_rate
-    
+
     min_timebase_index = get_minimum_timebase_index(active_channels, max_sampling_rate)
 
     if sampling_period < min_sample_period:
         return min_timebase_index
     elif sampling_period < 20e-9:
-        return int(round(math.log(sampling_period*1e9, 2))) 
+        return int(round(math.log(sampling_period*1e9, 2)))
     elif resolution in ["DR_8BIT", "DR_14BIT", "DR_15BIT"]:
         if sampling_period > (2**32 - 1)/125e6:
             return 2**32-1
@@ -315,23 +315,23 @@ cdef unsigned long compute_timebase_index(
         else:
             return int(round(62.5e6*sampling_period+2))
 
-cdef run_block(short handle, long no_of_pretrigger_samples, 
-        long no_of_posttrigger_samples, unsigned long timebase_index, 
+cdef run_block(short handle, long no_of_pretrigger_samples,
+        long no_of_posttrigger_samples, unsigned long timebase_index,
         unsigned short segment_index, unsigned short number_of_captures):
 
     cdef PICO_STATUS status
     cdef bint blocking = True
-    
+
     cdef int time_indisposed_ms = 0
 
     cdef int max_samples_per_segment
     with nogil:
-        status = ps5000aMemorySegments(handle, number_of_captures, 
+        status = ps5000aMemorySegments(handle, number_of_captures,
                 &max_samples_per_segment)
 
     check_status(status)
 
-    if (max_samples_per_segment < 
+    if (max_samples_per_segment <
             no_of_posttrigger_samples + no_of_pretrigger_samples):
         raise ValueError('The number of captures requested with the given '
                 'number of samples is too great to store in the picoscope '
@@ -343,7 +343,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
     check_status(status)
 
     with nogil:
-        status = ps5000aRunBlock(handle, no_of_pretrigger_samples, 
+        status = ps5000aRunBlock(handle, no_of_pretrigger_samples,
                 no_of_posttrigger_samples, timebase_index,
                 &time_indisposed_ms, segment_index, NULL, NULL)
 
@@ -363,12 +363,12 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 
             if finished:
                 break
-            
+
             # Sleep for another few microseconds
             time.sleep(10e-6)
 
 # cdef setup_arrays(short handle, channels, samples):
-    
+
     # cdef PICO_STATUS status
     # cdef PS5000A_CHANNEL _channel
     # cdef short * _buffer
@@ -379,7 +379,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
     # n_channels = len(channels)
 
     # full_array = np.zeros((n_channels, samples), dtype='int16')
-    
+
     # data_dict = {}
 
     # for n, channel in enumerate(channels):
@@ -390,9 +390,9 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 
         # with nogil:
             # # differs from 3k:
-            # # ps3000aSetDataBuffer(handle, _channel, _buffer, 
+            # # ps3000aSetDataBuffer(handle, _channel, _buffer,
             # #        _samples, segment_index, PS3000A_RATIO_MODE_NONE)
-            # status = ps4000SetDataBufferWithMode(handle, _channel, _buffer, 
+            # status = ps4000SetDataBufferWithMode(handle, _channel, _buffer,
                     # _samples, RATIO_MODE_NONE)
 
         # check_status(status)
@@ -402,7 +402,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
     # return channel_array
 
 
-cdef get_data(short handle, channels, samples, unsigned long downsample, 
+cdef get_data(short handle, channels, samples, unsigned long downsample,
         PS5000A_RATIO_MODE downsample_mode):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
@@ -417,7 +417,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     cdef PS5000A_CHANNEL _channel
     cdef short * _buffer
     cdef long _samples = samples
-    
+
     cdef unsigned short segment_index = 0
 
     n_channels = len(channels)
@@ -427,7 +427,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
         _samples = int(math.ceil(samples/downsample))
 
     full_array = np.zeros((n_channels, 1, _samples), dtype='int16')
-    
+
     data_dict = {}
 
     for n, channel in enumerate(channels):
@@ -437,14 +437,14 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
         _buffer = <short *>np.PyArray_DATA(channel_array[0, :])
 
         with nogil:
-            status = ps5000aSetDataBuffer(handle, _channel, _buffer, 
+            status = ps5000aSetDataBuffer(handle, _channel, _buffer,
                     _samples, segment_index, PS5000A_RATIO_MODE_NONE)
 
         check_status(status)
 
         data_dict[channel] = channel_array
-        
-    
+
+
     cdef unsigned long start_index = 0
     cdef short overflow
 
@@ -465,7 +465,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     cdef unsigned int n_samples = _samples
 
     with nogil:
-        status = ps5000aGetValues(handle, start_index, &n_samples, 
+        status = ps5000aGetValues(handle, start_index, &n_samples,
                 downsample, downsample_mode, segment_index,
                 &overflow)
 
@@ -477,7 +477,7 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
     with nogil:
         status = ps5000aGetTriggerTimeOffset64(handle,
                 _int_trigger_times, &_trigger_time_units, segment_index)
-        
+
     check_status(status)
 
     overflow_dict = {}
@@ -485,15 +485,15 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
         overflow_dict[channel] = bool(
                 1 << channel_enumeration[channel] & overflow)
 
-    # Convert the trigger time from int64 picoseconds to 
-    # float seconds and write back to the trigger_times array 
+    # Convert the trigger time from int64 picoseconds to
+    # float seconds and write back to the trigger_times array
     # (pointed to by _float_trigger_times)
-    _float_trigger_times[0] = (<float>_int_trigger_times[0] * 
+    _float_trigger_times[0] = (<float>_int_trigger_times[0] *
                     time_units[_trigger_time_units])
 
     return (data_dict, overflow_dict, trigger_times)
 
-cdef get_data_bulk(short handle, channels, samples, unsigned long downsample, 
+cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
         PS5000A_RATIO_MODE downsample_mode, unsigned short number_of_captures):
     '''Get the data associated with the given channels, and return a
     tuple containing a dictionary of samples length numpy arrays (as
@@ -505,10 +505,10 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
     Each channel is a view into an N x samples length block of memory,
     where N is the number of channels.
 
-    The returned times are a floating point array of seconds 
+    The returned times are a floating point array of seconds
     (which are derived from 64-bit integers of picoseconds).
     '''
-    
+
     cdef PICO_STATUS status
     cdef PS5000A_CHANNEL _channel
     cdef short * _buffer
@@ -521,9 +521,9 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
         raise ValueError('For rapid mode acquisitions, aggregation is '
                 'currently unsupported.')
 
-    full_array = np.zeros((n_channels, number_of_captures, _samples), 
+    full_array = np.zeros((n_channels, number_of_captures, _samples),
             dtype='int16')
-    
+
     data_dict = {}
 
     cdef int i
@@ -535,20 +535,20 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
         with nogil:
             for i in range(number_of_captures):
                 _single_capture_buffer = _buffer + i*_samples
-                status = ps5000aSetDataBuffer(handle, _channel, _buffer, 
+                status = ps5000aSetDataBuffer(handle, _channel, _buffer,
                     _samples, segment_index, PS5000A_RATIO_MODE_NONE)
 
         check_status(status)
 
         data_dict[channel] = channel_array
-    
+
     cdef unsigned long start_index = 0
     cdef short any_overflow = 0
 
     cdef unsigned int n_samples = _samples
 
     cdef bint n_samples_fail = False
-    
+
     cdef short* _overflow = <short *>PyMem_Malloc(
             sizeof(short)*(number_of_captures))
 
@@ -572,7 +572,7 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
     try:
         with nogil:
-            status = ps5000aGetValuesBulk(handle, &n_samples, 
+            status = ps5000aGetValuesBulk(handle, &n_samples,
                     0, number_of_captures-1, downsample, downsample_mode, _overflow)
 
             if not n_samples == _samples:
@@ -585,7 +585,7 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
         with nogil:
             status = ps5000aGetValuesTriggerTimeOffsetBulk64(handle,
-                    _int_trigger_times, _trigger_time_units, 0, 
+                    _int_trigger_times, _trigger_time_units, 0,
                     number_of_captures-1)
 
 
@@ -600,11 +600,11 @@ cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
 
             overflow_dict[channel] = bool(any_overflow)
 
-        # Convert the trigger times from int64 picoseconds to 
-        # float seconds and write back to the trigger_times array 
+        # Convert the trigger times from int64 picoseconds to
+        # float seconds and write back to the trigger_times array
         # (pointed to by _float_trigger_times)
         for i in range(number_of_captures):
-            _float_trigger_times[i] = (<float>_int_trigger_times[i] * 
+            _float_trigger_times[i] = (<float>_int_trigger_times[i] *
                     time_units[_trigger_time_units[i]])
 
     finally:
@@ -650,9 +650,9 @@ cdef setup_trigger_conditions(short handle, logic_sop, logic_variables):
                             trigger_state_dict[None])
 
         with nogil:
-            status = ps5000aSetTriggerChannelConditions(handle, 
+            status = ps5000aSetTriggerChannelConditions(handle,
                     trigger_conditions, n_conditions)
-    
+
     finally:
         PyMem_Free(trigger_conditions)
 
@@ -667,7 +667,7 @@ cdef setup_trigger_directions(short handle, trigger):
             directions[channel] = trigger[channel]['trigger_direction']
         else:
             directions[channel] = threshold_direction_dict[None]
-    
+
     cdef PS5000A_THRESHOLD_DIRECTION _directions[6]
 
     for channel in ('A', 'B', 'C', 'D', 'ext', 'aux'):
@@ -685,7 +685,7 @@ cdef setup_trigger_directions(short handle, trigger):
 
     check_status(status)
 
-cdef setup_trigger_properties(short handle, trigger, channel_states, 
+cdef setup_trigger_properties(short handle, trigger, channel_states,
         long autotrigger_timeout_ms):
 
     cdef PICO_STATUS status
@@ -745,15 +745,15 @@ cdef setup_trigger_properties(short handle, trigger, channel_states,
                     trigger[channel]['threshold_mode'])
 
         with nogil:
-            status = ps5000aSetTriggerChannelProperties(handle, 
+            status = ps5000aSetTriggerChannelProperties(handle,
                     trigger_properties, n_properties, 0, autotrigger_timeout_ms)
 
     finally:
         PyMem_Free(trigger_properties)
 
-    check_status(status)    
+    check_status(status)
 
-cdef setup_pulse_width_qualifier(short handle, trigger, 
+cdef setup_pulse_width_qualifier(short handle, trigger,
         float sampling_period):
 
     cdef PICO_STATUS status
@@ -794,18 +794,18 @@ cdef setup_pulse_width_qualifier(short handle, trigger,
                             trigger_state_dict[None])
 
         with nogil:
-            status = ps5000aSetPulseWidthQualifier(handle, pwq_conditions, 
+            status = ps5000aSetPulseWidthQualifier(handle, pwq_conditions,
                     n_conditions, PWQ_direction, PWQ_lower, PWQ_upper, PWQ_type)
 
     finally:
         PyMem_Free(pwq_conditions)
 
-    check_status(status)    
+    check_status(status)
 
 
-cdef setup_trigger(handle, trigger, channel_states, 
+cdef setup_trigger(handle, trigger, channel_states,
         float sampling_period, long autotrigger_timeout_ms):
-    
+
     # Firstly set up the channel conditions
 
     logic_variables, logic_sop = trigger['trigger_logic']
@@ -814,7 +814,7 @@ cdef setup_trigger(handle, trigger, channel_states,
 
     setup_trigger_directions(handle, trigger)
 
-    setup_trigger_properties(handle, trigger, channel_states, 
+    setup_trigger_properties(handle, trigger, channel_states,
             autotrigger_timeout_ms)
 
     if trigger['PWQ'] is not None:
@@ -831,7 +831,7 @@ cpdef get_units():
     cdef short count
 
     cdef bytes py_serial_str
-    
+
     with nogil:
         status = ps5000aEnumerateUnits(&count, serial_str, &n)
 
@@ -880,9 +880,9 @@ cdef class Pico5k:
         channel_default_state = {'A':True, 'B':False, 'C':False, 'D':False}
 
         default_trigger = ''
-        
+
         self.__resolution = resolution
-        
+
         self.__hardware_variant = get_unit_info(
                 self._handle, pico_status.PICO_VARIANT_INFO)
 
@@ -893,7 +893,7 @@ cdef class Pico5k:
                 self._handle, pico_status.PICO_BATCH_AND_SERIAL)
 
         self.__segment_index = 0
-        
+
         # __channel_states stores which channels are enabled along
         # with necessary info about that channel
         self.__channel_states = {}
@@ -948,10 +948,10 @@ cdef class Pico5k:
 
         return info
 
-    def configure_channel(self, channel, enable=True, voltage_range='5V', 
+    def configure_channel(self, channel, enable=True, voltage_range='5V',
             channel_type='DC', offset=0.0):
 
-        set_channel(self._handle, channel, enable, voltage_range, 
+        set_channel(self._handle, channel, enable, voltage_range,
                 channel_type, offset)
 
         self.__channel_states[channel] = (
@@ -964,7 +964,7 @@ cdef class Pico5k:
 
         A trigger object is an object that possesses zero or more channel
         triggers and logic describing how the channels should be combined.
-        Optionally, a pulse width qualifier (PWQ) can be included with the 
+        Optionally, a pulse width qualifier (PWQ) can be included with the
         object.
 
         Channel Triggers
@@ -979,7 +979,7 @@ cdef class Pico5k:
         'lower_threshold' (volts),
         'lower_hysteresis' (volts),
         'threshold_mode' (one of 'LEVEL' or 'WINDOW'),
-        'trigger_direction' (a direction contained in 
+        'trigger_direction' (a direction contained in
             threshold_direction_dict),
 
         For example:
@@ -988,20 +988,20 @@ cdef class Pico5k:
 
         Logic Function
         --------------
-        
-        The logic function is accessed with the 'logic_function' key and 
+
+        The logic function is accessed with the 'logic_function' key and
         describes how the channels should be combined. This is necessary to
         describe which channels should be looked up.
 
         The string should describe a logical function of the possible
-        trigger channels and pulse width qualifier, which can be 'A', 'B', 
+        trigger channels and pulse width qualifier, which can be 'A', 'B',
         'C', 'D', 'ext', 'aux' and 'PWQ' according to the hardware.
 
         If a channel is included in the logic string that does not
-        correspond to a valid hardware channel, then picopy.logic.ParseError 
+        correspond to a valid hardware channel, then picopy.logic.ParseError
         is raised.
 
-        The four logical operands that are allowed, in order of precedence, 
+        The four logical operands that are allowed, in order of precedence,
         are:
         NOT: 'NOT', '~', '!'
         AND: 'AND', '.', '&'
@@ -1009,10 +1009,10 @@ cdef class Pico5k:
         XOR: 'XOR'
 
         The word form of each of the above is not case dependent.
-        
+
         Parantheses can be used to explicitly denote precedence.
 
-        An empty string sets all the channels to "Don't care". This 
+        An empty string sets all the channels to "Don't care". This
         effectively turns off triggering.
 
         Pulse Width Qualifier
@@ -1023,7 +1023,7 @@ cdef class Pico5k:
 
         'PWQ_logic' (a string describing the logic function of the channels.
             It is of the same form as the logic string for the main trigger
-            object - see above - but without 'PWQ' being allowed as a 
+            object - see above - but without 'PWQ' being allowed as a
             boolean variable.)
         'PWQ_lower' (seconds),
         'PWQ_upper' (seconds),
@@ -1038,7 +1038,7 @@ cdef class Pico5k:
         # trigger_logic is a list (sum) of lists (products)
         trigger_logic = logic.get_minimal_sop_from_string(
                 trigger_object['logic_function'], logic_variables)
-        
+
         trigger = {}
         trigger['trigger_logic'] = (logic_variables, trigger_logic)
 
@@ -1054,11 +1054,11 @@ cdef class Pico5k:
                     enabled_logic_variables.add(variable)
 
         for channel in self.__channels:
-            
+
             if channel in enabled_logic_variables:
 
                 channel_trigger = {}
-                    
+
                 try:
                     _channel_trigger = trigger_object[channel]
                 except KeyError as e:
@@ -1079,15 +1079,15 @@ cdef class Pico5k:
                     if each_property == 'threshold_mode':
                         channel_trigger[each_property] = (
                                 threshold_mode_dict[property_value])
-                    
+
                     elif (each_property == 'trigger_direction'):
                         channel_trigger[each_property] = (
                                 threshold_direction_dict[property_value])
-                    
+
                     else:
 
                         float_property_value = float(property_value)
-                        if ('hysteresis' in each_property and 
+                        if ('hysteresis' in each_property and
                                 float_property_value < 0.0):
                             raise ValueError('Negative hysteresis: ',
                                     'Hysteresis values should be positive.')
@@ -1099,7 +1099,7 @@ cdef class Pico5k:
 
             else:
                 trigger[channel] = None
-                
+
         if 'PWQ' in enabled_logic_variables:
 
             pwq_trigger = {}
@@ -1109,7 +1109,7 @@ cdef class Pico5k:
             except KeyError as e:
                 raise KeyError('Missing channel: trigger_object is '
                         'missing expected channel %s' % (e,))
-            
+
             for each_property in default_pwq_properties:
                 try:
                     property_value = (
@@ -1117,11 +1117,11 @@ cdef class Pico5k:
                 except KeyError as e:
                     raise KeyError('Missing pwq property: '
                             '%s (PWQ)' % (e,))
-                    
+
                 if each_property == 'PWQ_type':
                     pwq_trigger[each_property] = (
                             PWQ_type_dict[property_value])
-                    
+
                 elif (each_property == 'PWQ_direction'):
                     pwq_trigger[each_property] = (
                             threshold_direction_dict[property_value])
@@ -1130,12 +1130,12 @@ cdef class Pico5k:
                     # We don't want 'PWQ' to be a variable. This would break
                     # lots of things!
                     logic_variables = self.__channels
-                    
+
                     pwq_logic = logic.get_minimal_sop_from_string(
                             property_value, logic_variables)
 
                     pwq_trigger[each_property] = (logic_variables, pwq_logic)
-                    
+
                 else:
                     float_property_value = float(property_value)
                     if float_property_value < 0.0:
@@ -1143,17 +1143,17 @@ cdef class Pico5k:
                                 'The pulse width specifiers must be a '
                                 'positive number of seconds.')
                     pwq_trigger[each_property] = float_property_value
-                    
+
             trigger['PWQ'] = pwq_trigger
         else:
             trigger['PWQ'] = None
-            
+
 
         # Finally write the trigger dict back to the main triggers dict
         self.__trigger = trigger
 
     def get_valid_sampling_period(self, sampling_period):
-        '''Compute the closest valid sampling period to sampling_period 
+        '''Compute the closest valid sampling period to sampling_period
         given the hardware settings and return a tuple giving the closest
         valid sampling period as a floating point number and the maximum
         number of samples that can be captured at that sampling rate as:
@@ -1173,7 +1173,7 @@ cdef class Pico5k:
         cdef unsigned long timebase_index = compute_timebase_index(
                 sampling_period, self.__max_sampling_rate, active_channels, self.__resolution)
 
-        valid_period, max_samples = get_timebase(self._handle, 
+        valid_period, max_samples = get_timebase(self._handle,
                 timebase_index, 0, 0)
 
         # We should look to see whether we should
@@ -1182,7 +1182,7 @@ cdef class Pico5k:
         min_timebase_index = get_minimum_timebase_index(active_channels, self.__max_sampling_rate)
         max_timebase_index = 2**32-1
 
-        if (sampling_period > valid_period and 
+        if (sampling_period > valid_period and
                 timebase_index < max_timebase_index):
             alt_timebase_index = timebase_index + 1
 
@@ -1218,20 +1218,20 @@ cdef class Pico5k:
         return (valid_period, max_samples)
 
     def get_scalings(self):
-        
+
         min_val, max_val = get_sample_limits(self._handle)
         scalings = {}
-        
+
         for channel in self.__channel_states:
             if self.__channel_states[channel][1]:
-                scalings[channel] = ( 
+                scalings[channel] = (
                         self.__channel_states[channel][0]/max_val)
 
         return scalings
 
-    def capture_block(self, sampling_period, post_trigger, 
+    def capture_block(self, sampling_period, post_trigger,
             pre_trigger=0.0, units = "seconds", autotrigger_timeout=None, 
-            number_of_frames=1, downsample=1, downsample_mode='NONE', 
+            number_of_frames=1, downsample=1, downsample_mode='NONE',
             return_scaled_array=True):
         '''Capture a block of data.
 
@@ -1240,21 +1240,21 @@ cdef class Pico5k:
         be used, call the get_valid_sampling_period method with the same
         sampling_period argument.
 
-        autotrigger_timeout is the number of seconds before the trigger 
-        should fire automatically. Setting this to None or 0 means the 
+        autotrigger_timeout is the number of seconds before the trigger
+        should fire automatically. Setting this to None or 0 means the
         trigger will never fire automatically.
 
         downsample_mode dictates the mode that the pico scope uses
         to downsample the captured data and return it to the host machine.
         For every block of length ``downsample'', 'NONE' returns
-        all samples with no downsample, 'AVERAGE' returns the average of 
+        all samples with no downsample, 'AVERAGE' returns the average of
         those samples, and 'DECIMATE' returns the first.
 
         If return_scaled_array is set to False, the raw data is
         returned without scaling it to the voltage range for each
         channel.
         '''
-        
+
         cdef unsigned long timebase_index
 
         valid_sampling_period, max_samples = self.get_valid_sampling_period(
@@ -1264,12 +1264,12 @@ cdef class Pico5k:
                     round(post_trigger/valid_sampling_period))
             pre_trigger_samples = int(
                     round(pre_trigger/valid_sampling_period))
-        elif units == "samples": 
+        elif units == "samples":
             post_trigger_samples = post_trigger
             pre_trigger_samples = pre_trigger
         else:
             raise ValueError("Units must be in seconds or samples")
-        
+
         n_samples = post_trigger_samples + pre_trigger_samples
         if n_samples > max_samples:
             raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
@@ -1284,8 +1284,8 @@ cdef class Pico5k:
         if active_channels == 0:
             raise RuntimeError('No active channels: No channels have been '
                     'enabled.')
-        
-        timebase_index = compute_timebase_index(valid_sampling_period, 
+
+        timebase_index = compute_timebase_index(valid_sampling_period,
                 self.__max_sampling_rate, active_channels, self.__resolution)
 
         if autotrigger_timeout is None:
@@ -1294,12 +1294,12 @@ cdef class Pico5k:
         # Convert the autotrigger_timeout from seconds to milliseconds
         autotrigger_timeout_ms = int(round(autotrigger_timeout * 1e3))
 
-        if (autotrigger_timeout_ms < 0.0 or 
+        if (autotrigger_timeout_ms < 0.0 or
                 autotrigger_timeout_ms > 2**(8*sizeof(long) - 1)):
             raise ValueError('Invalid timeout:'
                     'The autotrigger timeout must be a positive number '
-                    'of seconds, no greater than %.3f. (%.3f given)' % 
-                    (2**(8*sizeof(long) - 1)/1e3, 
+                    'of seconds, no greater than %.3f. (%.3f given)' %
+                    (2**(8*sizeof(long) - 1)/1e3,
                         float(autotrigger_timeout)))
 
         setup_trigger(self._handle, self.__trigger, self.__channel_states,
@@ -1315,11 +1315,11 @@ cdef class Pico5k:
                 downsampling_modes[downsample_mode])
 
         if number_of_frames == 1:
-            data, overflow, trigger_times = get_data(self._handle, 
+            data, overflow, trigger_times = get_data(self._handle,
                     data_channels, n_samples, _downsample, _downsample_mode)
         else:
-            data, overflow, trigger_times = get_data_bulk(self._handle, 
-                    data_channels, n_samples, _downsample, _downsample_mode, 
+            data, overflow, trigger_times = get_data_bulk(self._handle,
+                    data_channels, n_samples, _downsample, _downsample_mode,
                     number_of_frames)
 
         stop_scope(self._handle)
@@ -1332,4 +1332,3 @@ cdef class Pico5k:
                 data[channel] = scaled_channel_data
 
         return (data, overflow)
-

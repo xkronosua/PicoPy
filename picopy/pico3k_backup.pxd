@@ -428,7 +428,7 @@ cdef extern from 'ps3000aApi.h':
 
     PICO_STATUS ps3000aGetValuesTriggerTimeOffsetBulk64(
             short handle,
-            long * times,
+            int64_t * times,
             PS3000A_TIME_UNITS * timeUnits,
             unsigned short fromSegmentIndex,
             unsigned short toSegmentIndex) nogil

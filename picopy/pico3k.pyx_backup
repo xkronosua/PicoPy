@@ -32,8 +32,6 @@ from math import copysign
 
 from libc.stdlib cimport malloc, free
 
-from cpython.mem cimport PyMem_Malloc, PyMem_Free
-
 import numpy as np
 cimport numpy as np
 
@@ -112,14 +110,6 @@ threshold_direction_dict = frozendict({
 	'NEGATIVE_RUNT': PS3000A_NEGATIVE_RUNT,
 	'NONE': PS3000A_NONE,
 	None: PS3000A_NONE,})
-
-time_units = frozendict({
-	PS3000A_FS: 1e-15,
-	PS3000A_PS: 1e-12,
-	PS3000A_NS: 1e-9,
-	PS3000A_US: 1e-6,
-	PS3000A_MS: 1e-3,
-	PS3000A_S: 1.0})
 
 threshold_mode_dict = frozendict({
 	'LEVEL': PS3000A_LEVEL,
@@ -334,42 +324,25 @@ cdef memorySegments(short handle, long nSegments):
 
 cdef run_block(short handle, long no_of_pretrigger_samples,
 		long no_of_posttrigger_samples, unsigned long timebase_index,
-		unsigned short segment_index, unsigned short number_of_captures):
+		unsigned short segment_index):
 
 	cdef PICO_STATUS status
 	cdef bint blocking = True
 
-	cdef long time_indisposed_ms = 0
-
-	cdef long max_samples_per_segment
-	with nogil:
-		status = ps3000aMemorySegments(handle, number_of_captures,
-				&max_samples_per_segment)
-
-	check_status(status)
-
-	if (max_samples_per_segment <
-			no_of_posttrigger_samples + no_of_pretrigger_samples):
-		raise ValueError('The number of captures requested with the given '
-				'number of samples is too great to store in the picoscope '
-				'memory')
-
-	with nogil:
-		status = ps3000aSetNoOfCaptures(handle, number_of_captures)
-
-	check_status(status)
+	cdef long time_indisposed_ms
 
 	with nogil:
 		status = ps3000aRunBlock(handle, no_of_pretrigger_samples,
-				no_of_posttrigger_samples, timebase_index,1,
+				no_of_posttrigger_samples, timebase_index, 1,
 				&time_indisposed_ms, segment_index, NULL, NULL)
-
+	print('status')
 	check_status(status)
 	cdef short finished = 0
 
 	if blocking:
 		# Sleep for the time it was expected to take (of course, this
 		# doesn't factor in the trigger time).
+
 		time.sleep(time_indisposed_ms * 1e-3)
 
 		while True:
@@ -380,44 +353,73 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 
 			if finished:
 				break
-
 			# Sleep for another few microseconds
 			time.sleep(10e-6)
 
-# cdef setup_arrays(short handle, channels, samples):
+cdef setup_arrays(short handle, channels, samples):
 
-	# cdef PICO_STATUS status
-	# cdef PS3000A_CHANNEL _channel
-	# cdef short * _buffer
-	# cdef long _samples = samples
-	# #Needed for 3k case
-	# #cdef unsigned short segment_index = 0
+	cdef PICO_STATUS status
+	cdef PS3000A_CHANNEL _channel
+	cdef short * _buffer
+	cdef long _samples = samples
+	cdef unsigned short segment_index = 0
 
-	# n_channels = len(channels)
+	n_channels = len(channels)
 
-	# full_array = np.zeros((n_channels, samples), dtype='int16')
+	full_array = np.zeros((n_channels, samples), dtype='int16')
 
-	# data_dict = {}
+	data_dict = {}
 
-	# for n, channel in enumerate(channels):
+	for n, channel in enumerate(channels):
 
-		# channel_array = full_array[n, :]
-		# _channel = channel_dict[channel]
-		# _buffer = <short *>np.PyArray_DATA(channel_array)
+		channel_array = full_array[n, :]
+		_channel = channel_dict[channel]
+		_buffer = <short *>np.PyArray_DATA(channel_array)
 
-		# with nogil:
-			# # differs from 3k:
-			# # ps3000aSetDataBuffer(handle, _channel, _buffer,
-			# #		_samples, segment_index, PS3000A_RATIO_MODE_NONE)
-			# status = ps4000SetDataBufferWithMode(handle, _channel, _buffer,
-					# _samples, RATIO_MODE_NONE)
+		with nogil:
+			status = ps3000aSetDataBuffer(handle, _channel, _buffer,
+					_samples, segment_index, PS3000A_RATIO_MODE_NONE)
 
-		# check_status(status)
+		check_status(status)
 
-		# data_dict[channel] = channel_array
+		data_dict[channel] = channel_array
 
-	# return channel_array
+	return channel_array
 
+'''
+def getDataRawBulk(self, channel='A', numSamples=0, fromSegment=0,
+                       toSegment=None, downSampleRatio=1, downSampleMode=0,
+                       data=None):
+        """Get data recorded in block mode."""
+        if not isinstance(channel, int):
+            channel = self.CHANNELS[channel]
+        if toSegment is None:
+            toSegment = self.noSegments - 1
+        if numSamples == 0:
+            numSamples = min(self.maxSamples, self.noSamples)
+
+        numSegmentsToCopy = toSegment - fromSegment + 1
+        if data is None:
+            data = np.ascontiguousarray(
+                np.zeros((numSegmentsToCopy, numSamples), dtype=np.int16))
+
+        # set up each row in the data array as a buffer for one of
+        # the memory segments in the scope
+        for i, segment in enumerate(range(fromSegment, toSegment + 1)):
+            self._lowLevelSetDataBufferBulk(channel,
+                                            data[i],
+                                            segment,
+                                            downSampleMode)
+        overflow = np.ascontiguousarray(
+            np.zeros(numSegmentsToCopy, dtype=np.int16))
+
+        self._lowLevelGetValuesBulk(numSamples, fromSegment, toSegment,
+downSampleRatio, downSampleMode, overflow)
+
+return (data, numSamples, overf
+low)
+'''
+cdef get_dataBulk()
 
 cdef get_data(short handle, channels, samples, unsigned long downsample,
 		PS3000A_RATIO_MODE downsample_mode):
@@ -430,32 +432,32 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 	where N is the number of channels.
 
 	'''
+
 	cdef PICO_STATUS status
 	cdef PS3000A_CHANNEL _channel
 	cdef short * _buffer
 	cdef long _samples = samples
-
 	cdef unsigned short segment_index = 0
 
 	n_channels = len(channels)
 
-	# 3k difference - DECIMATE not available in 4k
-	if (downsample_mode == PS3000A_RATIO_MODE_AVERAGE):
+	if (downsample_mode == PS3000A_RATIO_MODE_AVERAGE or
+			downsample_mode == PS3000A_RATIO_MODE_DECIMATE):
 		_samples = int(math.ceil(samples/downsample))
 
-	full_array = np.zeros((n_channels, 1, _samples), dtype='int16')
+	full_array = np.zeros((n_channels, _samples), dtype='int16')
 
 	data_dict = {}
 
 	for n, channel in enumerate(channels):
 
-		channel_array = full_array[n, :, :]
+		channel_array = full_array[n, :]
 		_channel = channel_dict[channel]
-		_buffer = <short *>np.PyArray_DATA(channel_array[0, :])
+		_buffer = <short *>np.PyArray_DATA(channel_array)
 
 		with nogil:
 			status = ps3000aSetDataBuffer(handle, _channel, _buffer,
-					_samples, segment_index, PS3000A_RATIO_MODE_NONE)
+					_samples, segment_index, downsample_mode)
 
 		check_status(status)
 
@@ -464,20 +466,6 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 
 	cdef unsigned long start_index = 0
 	cdef short overflow
-
-	# Setup the arrays for the trigger time (it's an array to maintain
-	# shape consistency with the bulk data capture).
-	cdef PS3000A_TIME_UNITS _trigger_time_units
-
-	_np_int_trigger_times = np.empty((1,), dtype='int64')
-
-	trigger_times = np.empty((1,), dtype='float64')
-
-	cdef int64_t* _int_trigger_times = <int64_t *>np.PyArray_DATA(
-			_np_int_trigger_times)
-
-	cdef double* _float_trigger_times = <double *>np.PyArray_DATA(
-			trigger_times)
 
 	cdef unsigned long n_samples = _samples
 
@@ -491,146 +479,15 @@ cdef get_data(short handle, channels, samples, unsigned long downsample,
 	if not n_samples == _samples:
 		raise IOError('The expected number of samples were not returned.')
 
-	with nogil:
-		status = ps3000aGetTriggerTimeOffset64(handle,
-				_int_trigger_times, &_trigger_time_units, segment_index)
-
-	check_status(status)
-
 	overflow_dict = {}
 	for channel in channels:
 		overflow_dict[channel] = bool(
 				1 << channel_enumeration[channel] & overflow)
 
-	# Convert the trigger time from int64 picoseconds to
-	# float seconds and write back to the trigger_times array
-	# (pointed to by _float_trigger_times)
-	_float_trigger_times[0] = (<float>_int_trigger_times[0] *
-					time_units[_trigger_time_units])
+	print overflow_dict
+	print overflow
 
-	return (data_dict, overflow_dict, trigger_times)
-
-cdef get_data_bulk(short handle, channels, samples, unsigned long downsample,
-		PS3000A_RATIO_MODE downsample_mode, unsigned short number_of_captures):
-	'''Get the data associated with the given channels, and return a
-	tuple containing a dictionary of samples length numpy arrays (as
-	the first element), a dictionary of bools indicating whether
-	the scope channel overflowed during the capture, and an array
-	of times denoting the offset of the trigger from the beginning of
-	the capture.
-
-	Each channel is a view into an N x samples length block of memory,
-	where N is the number of channels.
-
-	The returned times are a floating point array of seconds
-	(which are derived from 64-bit integers of picoseconds).
-	'''
-
-	cdef PICO_STATUS status
-	cdef PS3000A_CHANNEL _channel
-	cdef short * _buffer
-	cdef short * _single_capture_buffer
-	cdef long _samples = samples
-	cdef unsigned short segment_index = 0
-	n_channels = len(channels)
-
-	if downsample_mode != PS3000A_RATIO_MODE_NONE:
-		raise ValueError('For rapid mode acquisitions, aggregation is '
-				'currently unsupported.')
-
-	full_array = np.zeros((n_channels, number_of_captures, _samples),
-			dtype='int16')
-
-	data_dict = {}
-
-	cdef int i
-	for n, channel in enumerate(channels):
-
-		channel_array = full_array[n, :, :]
-		_channel = channel_dict[channel]
-		_buffer = <short *>np.PyArray_DATA(channel_array)
-		with nogil:
-			for i in range(number_of_captures):
-				_single_capture_buffer = _buffer + i*_samples
-				status = ps3000aSetDataBuffer(handle, _channel, _buffer,
-					_samples, segment_index, PS3000A_RATIO_MODE_NONE)
-
-		check_status(status)
-
-		data_dict[channel] = channel_array
-
-	cdef unsigned long start_index = 0
-	cdef short any_overflow = 0
-
-	cdef unsigned long n_samples = _samples
-
-	cdef bint n_samples_fail = False
-
-	cdef short* _overflow = <short *>PyMem_Malloc(
-			sizeof(short)*(number_of_captures))
-
-	# Set up the arrays for getting the trigger times
-	cdef PS3000A_TIME_UNITS* _trigger_time_units = (
-			<PS3000A_TIME_UNITS *>PyMem_Malloc(
-				sizeof(PS3000A_TIME_UNITS)*number_of_captures))
-
-	_np_int_trigger_times = np.empty((number_of_captures,),
-			dtype='int64')
-
-	trigger_times = np.empty((number_of_captures,), dtype='float64')
-
-	cdef long* _int_trigger_times = <long *>np.PyArray_DATA(
-			_np_int_trigger_times)
-
-	cdef double* _float_trigger_times = <double *>np.PyArray_DATA(
-			trigger_times)
-
-	cdef int this_channel
-
-	try:
-		with nogil:
-			status = ps3000aGetValuesBulk(handle, &n_samples,
-					0, number_of_captures-1, downsample, downsample_mode, _overflow)
-
-			if not n_samples == _samples:
-				n_samples_fail = True
-
-		check_status(status)
-
-		if n_samples_fail:
-			raise IOError('The expected number of samples were not returned.')
-
-		with nogil:
-			status = ps3000aGetValuesTriggerTimeOffsetBulk64(handle,
-					_int_trigger_times, _trigger_time_units, 0,
-					number_of_captures-1)
-
-
-		check_status(status)
-
-		overflow_dict = {}
-		for channel in channels:
-			this_channel = channel_enumeration[channel]
-
-			for i in range(number_of_captures):
-				any_overflow &= (1 << this_channel) & _overflow[i]
-
-			overflow_dict[channel] = bool(any_overflow)
-
-		# Convert the trigger times from int64 picoseconds to
-		# float seconds and write back to the trigger_times array
-		# (pointed to by _float_trigger_times)
-		for i in range(number_of_captures):
-			_float_trigger_times[i] = (<float>_int_trigger_times[i] *
-					time_units[_trigger_time_units[i]])
-
-	finally:
-		PyMem_Free(_overflow)
-		PyMem_Free(_trigger_time_units)
-
-	return (data_dict, overflow_dict, trigger_times)
-
-
+	return (data_dict, overflow_dict)
 
 cdef stop_scope(short handle):
 
@@ -1261,9 +1118,9 @@ cdef class Pico3k:
 		nMaxSamples = memorySegments(self.__handle,nSegments)
 		return nMaxSamples
 
-	def capture_block(self, sampling_period, post_trigger,
-			pre_trigger=0.0, units = "seconds", autotrigger_timeout=None,
-			number_of_frames=3, downsample=1, downsample_mode='NONE',
+	def capture_block(self, sampling_period, post_trigger_time,
+			pre_trigger_time=0.0, autotrigger_timeout=None,
+			downsample=1, downsample_mode='NONE',
 			return_scaled_array=True):
 		'''Capture a block of data.
 
@@ -1291,18 +1148,14 @@ cdef class Pico3k:
 
 		valid_sampling_period, max_samples = self.get_valid_sampling_period(
 				sampling_period)
-		if units == "seconds":
-			post_trigger_samples = int(
-					round(post_trigger/valid_sampling_period))
-			pre_trigger_samples = int(
-					round(pre_trigger/valid_sampling_period))
-		elif units == "samples":
-			post_trigger_samples = post_trigger
-			pre_trigger_samples = pre_trigger
-		else:
-			raise ValueError("Units must be in seconds or samples")
+
+		post_trigger_samples = int(
+				round(post_trigger_time/valid_sampling_period))
+		pre_trigger_samples = int(
+				round(pre_trigger_time/valid_sampling_period))
 
 		n_samples = post_trigger_samples + pre_trigger_samples
+
 		if n_samples > max_samples:
 			raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
 
@@ -1338,21 +1191,16 @@ cdef class Pico3k:
 				sampling_period, autotrigger_timeout_ms)
 
 		segment_index = 0
-
+		print('run_block')
 		run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
-				timebase_index, segment_index, number_of_frames)
+				timebase_index, segment_index)
 
 		cdef unsigned long _downsample = downsample
 		cdef PS3000A_RATIO_MODE _downsample_mode = (
 				downsampling_modes[downsample_mode])
 
-		if number_of_frames == 1:
-			data, overflow, trigger_times = get_data(self.__handle,
-					data_channels, n_samples, _downsample, _downsample_mode)
-		else:
-			data, overflow, trigger_times = get_data_bulk(self.__handle,
-					data_channels, n_samples, _downsample, _downsample_mode,
-					number_of_frames)
+		data, overflow = get_data(self.__handle, data_channels, n_samples,
+				_downsample, _downsample_mode)
 
 		stop_scope(self.__handle)
 
@@ -1363,4 +1211,4 @@ cdef class Pico3k:
 				scaled_channel_data = data[channel] * scalings[channel]
 				data[channel] = scaled_channel_data
 
-		return (data, overflow,trigger_times)
+		return (data, overflow)
