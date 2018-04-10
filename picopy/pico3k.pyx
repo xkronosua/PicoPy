@@ -929,7 +929,8 @@ cdef class Pico3k:
 		self.EXT_MAX_VALUE = 32767
 		self.EXT_MIN_VALUE = -32767
 		self.EXT_RANGE_VOLTS = 20
-
+		self.CHRange['ext'] = 5
+		self.CHOffset['ext'] = 0
 		# Set the default enable state of the channel
 		channel_default_state = {'A':True, 'B':False, 'C':False, 'D':False}
 
@@ -1508,7 +1509,7 @@ cdef class Pico3k:
 		"""Return the minimum ADC value, used for scaling."""
 		return self.MIN_VALUE
 
-	def setSimpleTrigger(self, trigSrc, threshold_V=0, direction="Rising",
+	def setSimpleTrigger(self, trigSrc='ext', threshold_V=0, direction="Rising",
 						 delay=0, timeout_ms=100, enabled=True):
 		"""Set up a simple trigger.
 
