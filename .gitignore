@@ -3,5 +3,6 @@
 *.swp
 pico_status.c
 pico3k.c
-build
+build/
 PicoPy.egg-info/
+dist/
