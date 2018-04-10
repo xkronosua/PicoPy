@@ -44,7 +44,7 @@ capability_dict = frozendict({
 	b'3205B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
 	b'3206A': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
 	b'3206B': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
-	b'3206D': frozendict({'channels': 2, 'max_sampling_rate': 5e8}),
+	b'3206D': frozendict({'channels': 2, 'max_sampling_rate': 1e9}),
 	b'3404A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
 	b'3404B': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
 	b'3405A': frozendict({'channels': 4, 'max_sampling_rate': 1e9}),
@@ -66,6 +66,7 @@ channel_type_dict = frozendict({
 	'DC': PS3000A_DC})
 
 voltage_range_dict = frozendict({
+	'20mV': PS3000A_20MV,
 	'50mV': PS3000A_50MV,
 	'100mV': PS3000A_100MV,
 	'200mV': PS3000A_200MV,
@@ -77,6 +78,7 @@ voltage_range_dict = frozendict({
 	'20V': PS3000A_20V})
 
 voltage_range_values = frozendict({
+	PS3000A_20MV: 20e-3,
 	PS3000A_50MV: 50e-3,
 	PS3000A_100MV: 100e-3,
 	PS3000A_200MV: 200e-3,
@@ -245,7 +247,7 @@ cdef set_channel(short handle, channel, bint enable,
 	check_status(status)
 
 cdef get_timebase(short handle, unsigned long timebase_index,
-		long no_samples, unsigned short segment_index):
+		long no_samples, unsigned short segment_index, short oversample=0):
 
 	cdef float time_interval
 	cdef long max_samples
@@ -253,7 +255,7 @@ cdef get_timebase(short handle, unsigned long timebase_index,
 
 	with nogil:
 		status = ps3000aGetTimebase2(handle, timebase_index, no_samples,
-				&time_interval, 1, &max_samples, segment_index)
+				&time_interval, oversample, &max_samples, segment_index)
 
 	check_status(status)
 
@@ -830,6 +832,23 @@ cdef setup_trigger(handle, trigger, channel_states,
 	if trigger['PWQ'] is not None:
 		setup_pulse_width_qualifier(handle, trigger, sampling_period)
 
+cdef setSimpleTrigger(short handle, short enable, source, short threshold,
+	direction, unsigned long delay,short autoTrigger_ms):
+	'''
+	This function simplifies arming the trigger. It supports only the LEVEL trigger types
+	and does not allow more than one channel to have a trigger applied to it. Any previous
+	pulse width qualifier is cancelled.
+	'''
+	cdef PS3000A_CHANNEL _channel = channel_dict[source]
+	cdef PS3000A_THRESHOLD_DIRECTION _direction = threshold_direction_dict[direction]
+	cdef PICO_STATUS status
+
+	with nogil:
+		status = ps3000aSetSimpleTrigger(handle, enable, _channel, threshold,
+			_direction, delay, autoTrigger_ms)
+
+	check_status(status)
+
 
 cpdef get_units():
 	'''Return a list of the serial numbers of the connected units.
@@ -872,7 +891,24 @@ cdef class Pico3k:
 	cdef object __max_sampling_rate
 	cdef object __serial_string
 
+	cdef short oversample
+	cdef unsigned short timebase
+	cdef float sampleInterval
+	cdef long maxSamples
+	cdef long noSamples
+	cdef float sampleRate
+
 	cdef unsigned short __segment_index
+
+	CHRange = {}
+	CHOffset = {}
+
+	cdef short MAX_VALUE
+	cdef short MIN_VALUE
+
+	cdef short EXT_MAX_VALUE
+	cdef short EXT_MIN_VALUE
+	cdef short EXT_RANGE_VOLTS
 
 	def __cinit__(self, serial=None, channel_configs={}):
 
@@ -887,10 +923,17 @@ cdef class Pico3k:
 
 	def __init__(self, serial=None, channel_configs={}):
 
+		self.MAX_VALUE = 32764
+		self.MIN_VALUE = -32764
+
+		self.EXT_MAX_VALUE = 32767
+		self.EXT_MIN_VALUE = -32767
+		self.EXT_RANGE_VOLTS = 20
+
 		# Set the default enable state of the channel
 		channel_default_state = {'A':True, 'B':False, 'C':False, 'D':False}
 
-		default_trigger = ''
+		default_trigger = 'ext'
 
 		self.__hardware_variant = get_unit_info(
 				self.__handle, pico_status.PICO_VARIANT_INFO)
@@ -909,6 +952,8 @@ cdef class Pico3k:
 		self.__channel_states = {}
 
 		channels = []
+
+
 
 		# Iterate through all channels
 		for channel in channel_default_state:
@@ -964,7 +1009,8 @@ cdef class Pico3k:
 
 	def configure_channel(self, channel, enable=True, voltage_range='5V',
 			channel_type='DC', offset=0.0):
-
+		self.CHRange[channel] = voltage_range_values[voltage_range_dict[voltage_range]]
+		self.CHOffset[channel] = offset
 		set_channel(self.__handle, channel, enable, voltage_range,
 				channel_type, offset)
 
@@ -1364,3 +1410,223 @@ cdef class Pico3k:
 				data[channel] = scaled_channel_data
 
 		return (data, overflow,trigger_times)
+
+	def setChannel(self, channel='A', coupling="AC", VRange=2.0,
+				   VOffset=0.0, enabled=True,   probeAttenuation=1.0):
+		"""
+		Set up a specific chthe scopeannel.
+
+		It finds the smallest range that is capable of accepting your signal.
+		Return actual range of the scope as double.
+
+		The VOffset, is an offset that the scope will ADD to your signal.
+
+		If using a probe (or a sense resitor), the probeAttenuation value is
+		used to find the approriate channel range on the scope to use.
+
+		e.g. to use a 10x attenuation probe, you must supply the following
+		parameters ps.setChannel('A', "DC", 20.0, 5.0, True, False, 10.0)
+
+		The scope will then be set to use the +- 2V mode at the scope allowing
+		you to measure your signal from -25V to +15V.
+		After this point, you can set everything in terms of units as seen at
+		the tip of the probe. For example, you can set a trigger of 15V and it
+		will trigger at the correct value.
+
+		When using a sense resistor, lets say R = 1.3 ohm, you obtain the
+		relation:
+		V = IR, meaning that your probe as an attenuation of R compared to the
+		current you are trying to measure.
+
+		You should supply probeAttenuation = 1.3
+		The rest of your units should be specified in amps.
+
+		Unfortunately, you still have to supply a VRange that is very close to
+		the allowed values. This will change in furture version where we will
+		find the next largest range to accomodate the desired range.
+
+		If you want to use units of mA, supply a probe attenuation of 1.3E3.
+		Note, the authors recommend sticking to SI units because it makes it
+		easier to guess what units each parameter is in.
+
+		"""
+		#def configure_channel(self, channel, enable=True, voltage_range='5V',
+		#		channel_type='DC', offset=0.0):
+		self.configure_channel( channel, enable=enabled, voltage_range=VRange,
+				channel_type=coupling, offset=VOffset)
+
+	def getTimeBaseNum(self, sampleTimeS):
+		"""Convert sample time in S to something to pass to API Call."""
+		maxSampleTime = (((2 ** 32 - 1) - 2) / 125000000)
+		if sampleTimeS < 8.0E-9:
+			st = math.floor(math.log(sampleTimeS * 1E9, 2))
+			st = max(st, 0)
+		else:
+			if sampleTimeS > maxSampleTime:
+				sampleTimeS = maxSampleTime
+			st = math.floor((sampleTimeS * 125000000) + 2)
+
+		# is this cast needed?
+		st = int(st)
+		return st
+	def getTimestepFromTimebase(self, timebase):
+		"""Take API timestep code and returns the sampling period.
+		API timestep is an integer from 0-32
+		"""
+		if timebase < 3:
+			dt = 2. ** timebase / 1.0E9
+		else:
+			dt = (timebase - 2.0) / 125000000.
+		return dt
+
+	def setSamplingInterval(self, sampleInterval, duration, oversample=0,
+							segmentIndex=0):
+		"""Return (actualSampleInterval, noSamples, maxSamples)."""
+		self.oversample = oversample
+		self.timebase = self.getTimeBaseNum(sampleInterval)
+
+		timebase_dt = self.getTimestepFromTimebase(self.timebase)
+
+		noSamples = int(round(duration / timebase_dt))
+
+		#get_timebase(short handle, unsigned long timebase_index,
+		#		long no_samples, unsigned short segment_index):
+		(self.sampleInterval, self.maxSamples) = get_timebase(self.__handle,
+			self.timebase, noSamples, segmentIndex, oversample=oversample)
+
+		self.noSamples = noSamples
+		self.sampleRate = 1.0 / self.sampleInterval
+		return (self.sampleInterval, self.noSamples, self.maxSamples)
+
+	def getMaxValue(self):
+		"""Return the maximum ADC value, used for scaling."""
+		# TODO: make this more consistent accross versions
+		# This was a "fix" when we started supported PS5000a
+		return self.MAX_VALUE
+
+	def getMinValue(self):
+		"""Return the minimum ADC value, used for scaling."""
+		return self.MIN_VALUE
+
+	def setSimpleTrigger(self, trigSrc, threshold_V=0, direction="Rising",
+						 delay=0, timeout_ms=100, enabled=True):
+		"""Set up a simple trigger.
+
+		trigSrc can be either a number corresponding to the low level
+		specifications of the scope or a string such as 'A' or 'AUX'
+
+		direction can be a text string such as "Rising" or "Falling",
+		or the value of the dict from self.THRESHOLD_TYPE[] corresponding
+		to your trigger type.
+
+		delay is number of clock cycles to wait from trigger conditions met
+		until we actually trigger capture.
+
+		timeout_ms is time to wait in mS from calling runBlock() or similar
+		(e.g. when trigger arms) for the trigger to occur. If no trigger
+		occurs it gives up & auto-triggers.
+
+		Support for offset is currently untested
+
+		Note, the AUX port (or EXT) only has a range of +- 1V
+		(at least in PS6000)
+		"""
+
+		a2v = self.CHRange[trigSrc] / self.getMaxValue()
+		cdef short threshold_adc = ((threshold_V + self.CHOffset[trigSrc]) / a2v)
+
+		enabled = int(bool(enabled))
+
+		setSimpleTrigger(self.__handle, enabled, trigSrc, threshold_adc,
+								direction, delay, timeout_ms)
+
+	def capture_prep_block(self, pre_trigger=0.0, post_trigger=0.0, units = "seconds",
+			number_of_frames=3, downsample=1, downsample_mode='NONE',
+			return_scaled_array=True):
+		"""Capture a block of data.
+
+		The actual sampling period is adjusted to fit a nearest valid
+		sampling period that can be found. To know in advance what will
+		be used, call the get_valid_sampling_period method with the same
+		sampling_period argument.
+
+		autotrigger_timeout is the number of seconds before the trigger
+		should fire automatically. Setting this to None or 0 means the
+		trigger will never fire automatically.
+
+		downsample_mode dictates the mode that the pico scope uses
+		to downsample the captured data and return it to the host machine.
+		For every block of length ``downsample'', 'NONE' returns
+		all samples with no downsample, 'AVERAGE' returns the average of
+		those samples, and 'DECIMATE' returns the first.
+
+		If return_scaled_array is set to False, the raw data is
+		returned without scaling it to the voltage range for each
+		channel.
+
+		"""
+		cdef unsigned long timebase_index
+		timebase_index = self.timebase
+
+		valid_sampling_period, max_samples = self.sampleInterval, self.maxSamples
+
+
+		if units == "seconds":
+			post_trigger_samples = int(
+					round(post_trigger/valid_sampling_period))
+			pre_trigger_samples = int(
+					round(pre_trigger/valid_sampling_period))
+		elif units == "samples":
+			post_trigger_samples = post_trigger
+			pre_trigger_samples = pre_trigger
+		else:
+			raise ValueError("Units must be in seconds or samples")
+
+		#n_samples = post_trigger_samples + pre_trigger_samples
+		n_samples = min(self.noSamples, self.maxSamples)
+		if post_trigger_samples == 0:
+			post_trigger_samples = n_samples - pre_trigger_samples
+
+		if n_samples > max_samples:
+			raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
+
+		data_channels = set()
+		for channel in self.__channel_states:
+			if self.__channel_states[channel][1]:
+				data_channels.add(channel)
+
+		active_channels = len(data_channels)
+
+		if active_channels == 0:
+			raise RuntimeError('No active channels: No channels have been '
+					'enabled.')
+
+
+
+		segment_index = 0
+		t0 = time.time()
+		run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
+				timebase_index, segment_index, number_of_frames)
+		dt = time.time()-t0
+		cdef unsigned long _downsample = downsample
+		cdef PS3000A_RATIO_MODE _downsample_mode = (
+				downsampling_modes[downsample_mode])
+
+		if number_of_frames == 1:
+			data, overflow, trigger_times = get_data(self.__handle,
+					data_channels, n_samples, _downsample, _downsample_mode)
+		else:
+			data, overflow, trigger_times = get_data_bulk(self.__handle,
+					data_channels, n_samples, _downsample, _downsample_mode,
+					number_of_frames)
+
+		stop_scope(self.__handle)
+
+		scalings = self.get_scalings()
+
+		if return_scaled_array:
+			for channel in data:
+				scaled_channel_data = data[channel] * scalings[channel]
+				data[channel] = scaled_channel_data
+
+		return (data, overflow,trigger_times,dt)

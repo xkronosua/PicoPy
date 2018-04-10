@@ -15,3 +15,4 @@ picopy/qm.py
 picopy/triggers.py
 test/test_logic_parser.py
 test/test_pico.py
+test/test_pico3k.py
