@@ -360,7 +360,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 		status = ps3000aSetNoOfCaptures(handle, number_of_captures)
 
 	check_status(status)
-
+	t0 = time.time()
 	with nogil:
 		status = ps3000aRunBlock(handle, no_of_pretrigger_samples,
 				no_of_posttrigger_samples, timebase_index,1,
@@ -372,7 +372,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 	if blocking:
 		# Sleep for the time it was expected to take (of course, this
 		# doesn't factor in the trigger time).
-		time.sleep(time_indisposed_ms * 1e-3)
+		#time.sleep(time_indisposed_ms * 1e-3)
 
 		while True:
 			with nogil:
@@ -384,8 +384,9 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 				break
 
 			# Sleep for another few microseconds
-			time.sleep(10e-6)
-
+			time.sleep(1e-6)
+	t1 = time.time()
+	return t0, t1, time_indisposed_ms*1e-3
 # cdef setup_arrays(short handle, channels, samples):
 
 	# cdef PICO_STATUS status
@@ -1605,10 +1606,10 @@ cdef class Pico3k:
 
 
 		segment_index = 0
-		t0 = time.time()
-		run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
+
+		t0, t1, time_indisposed = run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
 				timebase_index, segment_index, number_of_frames)
-		dt = time.time()-t0
+
 		cdef unsigned long _downsample = downsample
 		cdef PS3000A_RATIO_MODE _downsample_mode = (
 				downsampling_modes[downsample_mode])
@@ -1629,5 +1630,6 @@ cdef class Pico3k:
 			for channel in data:
 				scaled_channel_data = data[channel] * scalings[channel]
 				data[channel] = scaled_channel_data
-
-		return (data, overflow,trigger_times,dt)
+		#data['T'] = np.linspace(t0,t1,len(scaled_channel_data))
+		data_t = np.linspace(t0,t1,len(trigger_times))
+		return (data, data_t, overflow,trigger_times)

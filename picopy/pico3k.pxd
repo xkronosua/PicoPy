@@ -3,7 +3,8 @@
 #
 
 from .pico_status cimport PICO_STATUS, PICO_INFO
-from libc.stdint cimport int64_t, uint64_t
+from libc.stdint cimport (
+    int16_t, uint16_t, int32_t, uint32_t, int64_t, uint64_t)
 
 # Simple constants replicated from ps3000aApi.h
 
