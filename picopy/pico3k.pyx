@@ -911,6 +911,16 @@ cdef class Pico3k:
 	cdef short EXT_MIN_VALUE
 	cdef short EXT_RANGE_VOLTS
 
+	cdef float pre_trigger
+	cdef float post_trigger
+	cdef long pre_trigger_samples
+	cdef long post_trigger_samples
+	cdef long n_samples
+	cdef str trig_units
+	cdef long number_of_frames
+	cdef int downsample
+	cdef str downsample_mode
+
 	def __cinit__(self, serial=None, channel_configs={}):
 
 		cdef char* serial_str
@@ -1482,8 +1492,19 @@ cdef class Pico3k:
 		return dt
 
 	def setSamplingInterval(self, sampleInterval, duration, oversample=0,
-							segmentIndex=0):
+							segmentIndex=0, pre_trigger=0.0, post_trigger=0.0,
+							units = "seconds", number_of_frames=3,
+							downsample=1, downsample_mode='NONE',):
 		"""Return (actualSampleInterval, noSamples, maxSamples)."""
+
+		self.pre_trigger = pre_trigger
+		self.post_trigger = post_trigger
+		self.trig_units = units
+		self.number_of_frames = number_of_frames
+		self.downsample = downsample
+		self.downsample_mode = downsample_mode
+
+
 		self.oversample = oversample
 		self.timebase = self.getTimeBaseNum(sampleInterval)
 
@@ -1498,6 +1519,28 @@ cdef class Pico3k:
 
 		self.noSamples = noSamples
 		self.sampleRate = 1.0 / self.sampleInterval
+
+
+		if self.trig_units == "seconds":
+			self.post_trigger_samples = int(
+					round(self.post_trigger/self.sampleInterval))
+			self.pre_trigger_samples = int(
+					round(self.pre_trigger/self.sampleInterval))
+		elif self.trig_units == "samples":
+			self.post_trigger_samples = int(self.post_trigger)
+			self.pre_trigger_samples = int(self.pre_trigger)
+		else:
+			raise ValueError("Units must be in seconds or samples")
+
+		#n_samples = post_trigger_samples + pre_trigger_samples
+		self.n_samples = min(self.noSamples, self.maxSamples)
+		if self.post_trigger_samples == 0:
+			self.post_trigger_samples = self.n_samples - self.pre_trigger_samples
+
+		if self.n_samples > self.maxSamples:
+			raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
+
+
 		return (self.sampleInterval, self.noSamples, self.maxSamples)
 
 	def getMaxValue(self):
@@ -1542,9 +1585,7 @@ cdef class Pico3k:
 		setSimpleTrigger(self.__handle, enabled, trigSrc, threshold_adc,
 								direction, delay, timeout_ms)
 
-	def capture_prep_block(self, pre_trigger=0.0, post_trigger=0.0, units = "seconds",
-			number_of_frames=3, downsample=1, downsample_mode='NONE',
-			return_scaled_array=True):
+	def capture_prep_block(self, return_scaled_array=True):
 		"""Capture a block of data.
 
 		The actual sampling period is adjusted to fit a nearest valid
@@ -1573,24 +1614,6 @@ cdef class Pico3k:
 		valid_sampling_period, max_samples = self.sampleInterval, self.maxSamples
 
 
-		if units == "seconds":
-			post_trigger_samples = int(
-					round(post_trigger/valid_sampling_period))
-			pre_trigger_samples = int(
-					round(pre_trigger/valid_sampling_period))
-		elif units == "samples":
-			post_trigger_samples = post_trigger
-			pre_trigger_samples = pre_trigger
-		else:
-			raise ValueError("Units must be in seconds or samples")
-
-		#n_samples = post_trigger_samples + pre_trigger_samples
-		n_samples = min(self.noSamples, self.maxSamples)
-		if post_trigger_samples == 0:
-			post_trigger_samples = n_samples - pre_trigger_samples
-
-		if n_samples > max_samples:
-			raise PicoError(pico_status.PICO_TOO_MANY_SAMPLES)
 
 		data_channels = set()
 		for channel in self.__channel_states:
@@ -1604,23 +1627,22 @@ cdef class Pico3k:
 					'enabled.')
 
 
-
 		segment_index = 0
 
-		t0, t1, time_indisposed = run_block(self.__handle, pre_trigger_samples, post_trigger_samples,
-				timebase_index, segment_index, number_of_frames)
+		t0, t1, time_indisposed = run_block(self.__handle, self.pre_trigger_samples,
+			self.post_trigger_samples, timebase_index, segment_index, self.number_of_frames)
 
-		cdef unsigned long _downsample = downsample
+		cdef unsigned long _downsample = self.downsample
 		cdef PS3000A_RATIO_MODE _downsample_mode = (
-				downsampling_modes[downsample_mode])
+				downsampling_modes[self.downsample_mode])
 
-		if number_of_frames == 1:
+		if self.number_of_frames == 1:
 			data, overflow, trigger_times = get_data(self.__handle,
-					data_channels, n_samples, _downsample, _downsample_mode)
+					data_channels, self.n_samples, _downsample, _downsample_mode)
 		else:
 			data, overflow, trigger_times = get_data_bulk(self.__handle,
-					data_channels, n_samples, _downsample, _downsample_mode,
-					number_of_frames)
+					data_channels, self.n_samples, _downsample, _downsample_mode,
+					self.number_of_frames)
 
 		stop_scope(self.__handle)
 

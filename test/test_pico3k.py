@@ -13,15 +13,15 @@ pico = picopy.Pico3k()
 n_captures = 100
 pico.setChannel("A", coupling="DC", VRange='20mV')
 pico.setChannel("B", coupling="DC", VRange='500mV')
-(sampleInterval, noSamples, maxSamples) = pico.setSamplingInterval(0.00001,0.0035)
+(sampleInterval, noSamples, maxSamples) = pico.setSamplingInterval(0.00001,0.0035,
+	number_of_frames=n_captures, downsample=1, downsample_mode='NONE')
 
 #trigger = picopy.EdgeTrigger(channel='B', threshold=-0.35, direction='FALLING')
 #pico.set_trigger(trigger)
 pico.setSimpleTrigger(trigSrc="B", threshold_V=-0.350, direction='FALLING',
 						 timeout_ms=10, enabled=True,delay=0)
 
-r = pico.capture_prep_block( number_of_frames=n_captures, downsample=1, downsample_mode='NONE',
-        return_scaled_array=1)
+r = pico.capture_prep_block(return_scaled_array=1)
 
 from pylab import *
 
