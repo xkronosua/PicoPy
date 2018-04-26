@@ -365,7 +365,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 		status = ps3000aRunBlock(handle, no_of_pretrigger_samples,
 				no_of_posttrigger_samples, timebase_index,1,
 				&time_indisposed_ms, segment_index, NULL, NULL)
-
+				
 	check_status(status)
 	cdef short finished = 0
 
@@ -384,42 +384,10 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 				break
 
 			# Sleep for another few microseconds
-			time.sleep(1e-6)
+			#time.sleep(1e-6)
 	t1 = time.time()
 	return t0, t1, time_indisposed_ms*1e-3
-# cdef setup_arrays(short handle, channels, samples):
 
-	# cdef PICO_STATUS status
-	# cdef PS3000A_CHANNEL _channel
-	# cdef short * _buffer
-	# cdef long _samples = samples
-	# #Needed for 3k case
-	# #cdef unsigned short segment_index = 0
-
-	# n_channels = len(channels)
-
-	# full_array = np.zeros((n_channels, samples), dtype='int16')
-
-	# data_dict = {}
-
-	# for n, channel in enumerate(channels):
-
-		# channel_array = full_array[n, :]
-		# _channel = channel_dict[channel]
-		# _buffer = <short *>np.PyArray_DATA(channel_array)
-
-		# with nogil:
-			# # differs from 3k:
-			# # ps3000aSetDataBuffer(handle, _channel, _buffer,
-			# #		_samples, segment_index, PS3000A_RATIO_MODE_NONE)
-			# status = ps4000SetDataBufferWithMode(handle, _channel, _buffer,
-					# _samples, RATIO_MODE_NONE)
-
-		# check_status(status)
-
-		# data_dict[channel] = channel_array
-
-	# return channel_array
 
 
 cdef get_data(short handle, channels, samples, unsigned long downsample,
@@ -921,18 +889,44 @@ cdef class Pico3k:
 	cdef int downsample
 	cdef str downsample_mode
 
-	def __cinit__(self, serial=None, channel_configs={}):
+	channel_configs = {}
 
-		cdef char* serial_str
+	def __cinit__(self, handle=None, channel_configs={}):
 
-		if serial == None:
-			serial_str = NULL
+		if handle is None:
+			self.__handle = open_unit(NULL)
 		else:
-			serial_str = serial
 
-		self.__handle = open_unit(serial_str)
+			self.__handle = handle
 
-	def __init__(self, serial=None, channel_configs={}):
+
+	def set_config(self,channel_configs):
+		if len(channel_configs)>0:
+			print('config')
+			c = channel_configs
+			self.setChannel("A", coupling="DC", VRange=c['ChA_VRange'], VOffset=c['ChA_Offset'])
+			self.setChannel("B", coupling="DC", VRange=c['ChB_VRange'], VOffset=c['ChB_Offset'])
+
+			self.setSamplingInterval(c['sampleInterval'],c['samplingDuration'],pre_trigger = c['pico_pretrig'],
+				number_of_frames=c['n_captures'], downsample=1, downsample_mode='NONE')
+
+			self.setSimpleTrigger(trigSrc=c['trigSrc'], threshold_V=c['threshold_V'],
+					direction=c['direction'], timeout_ms=5, enabled=True)
+
+	def  __reduce__(self):
+		return Pico3k, (self.__handle, self.channel_configs)
+
+	def __getstate__(self):
+		return (self.__handle, self.channel_configs)
+
+	def __setstate__(self, handle, channel_configs):
+		self.__handle = handle
+		self.channel_configs = channel_configs
+
+	def __init__(self, handle=None, channel_configs={}):
+
+		if not handle is None:
+			self.__handle = handle
 
 		self.MAX_VALUE = 32764
 		self.MIN_VALUE = -32764
@@ -942,8 +936,9 @@ cdef class Pico3k:
 		self.EXT_RANGE_VOLTS = 20
 		self.CHRange['ext'] = 5
 		self.CHOffset['ext'] = 0
+
 		# Set the default enable state of the channel
-		channel_default_state = {'A':True, 'B':False, 'C':False, 'D':False}
+		channel_default_state = {'A':True, 'B':True, 'C':False, 'D':False}
 
 		default_trigger = 'ext'
 
@@ -996,6 +991,8 @@ cdef class Pico3k:
 
 		self.set_trigger(trigger_object)
 
+
+
 	def __dealloc__(self):
 
 		try:
@@ -1004,7 +1001,10 @@ cdef class Pico3k:
 			pass
 
 	def close(self):
-		close_unit(self.__handle)
+		try:
+			close_unit(self.__handle)
+		except KeyError:
+			pass
 
 	def get_hardware_info(self):
 		'''Return some information about the attached hardware to which
@@ -1464,6 +1464,9 @@ cdef class Pico3k:
 		"""
 		#def configure_channel(self, channel, enable=True, voltage_range='5V',
 		#		channel_type='DC', offset=0.0):
+
+		self.channel_configs['Ch'+channel+'_VRange'] = VRange
+		self.channel_configs['Ch'+channel+'_VOffset'] = VOffset
 		self.configure_channel( channel, enable=enabled, voltage_range=VRange,
 				channel_type=coupling, offset=VOffset)
 
@@ -1496,6 +1499,13 @@ cdef class Pico3k:
 							units = "seconds", number_of_frames=3,
 							downsample=1, downsample_mode='NONE',):
 		"""Return (actualSampleInterval, noSamples, maxSamples)."""
+		self.channel_configs['sampleInterval']=sampleInterval
+		self.channel_configs['samplingDuration']=duration
+		self.channel_configs['pico_pretrig']=pre_trigger
+		self.channel_configs['n_captures']=number_of_frames
+
+
+
 
 		self.pre_trigger = pre_trigger
 		self.post_trigger = post_trigger
@@ -1576,6 +1586,9 @@ cdef class Pico3k:
 		Note, the AUX port (or EXT) only has a range of +- 1V
 		(at least in PS6000)
 		"""
+		self.channel_configs['trigSrc'] = trigSrc
+		self.channel_configs['threshold_V'] = threshold_V
+		self.channel_configs['direction'] = direction
 
 		a2v = self.CHRange[trigSrc] / self.getMaxValue()
 		cdef short threshold_adc = ((threshold_V + self.CHOffset[trigSrc]) / a2v)
