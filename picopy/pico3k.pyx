@@ -365,7 +365,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 		status = ps3000aRunBlock(handle, no_of_pretrigger_samples,
 				no_of_posttrigger_samples, timebase_index,1,
 				&time_indisposed_ms, segment_index, NULL, NULL)
-				
+
 	check_status(status)
 	cdef short finished = 0
 
@@ -384,7 +384,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 				break
 
 			# Sleep for another few microseconds
-			#time.sleep(1e-6)
+			time.sleep(1e-6)
 	t1 = time.time()
 	return t0, t1, time_indisposed_ms*1e-3
 
