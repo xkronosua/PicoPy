@@ -384,7 +384,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 				break
 
 			# Sleep for another few microseconds
-			#time.sleep(1e-6)
+			time.sleep(1e-6)
 	t1 = time.time()
 	return t0, t1, time_indisposed_ms*1e-3
 
