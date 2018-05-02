@@ -365,7 +365,7 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 		status = ps3000aRunBlock(handle, no_of_pretrigger_samples,
 				no_of_posttrigger_samples, timebase_index,1,
 				&time_indisposed_ms, segment_index, NULL, NULL)
-				
+
 	check_status(status)
 	cdef short finished = 0
 
@@ -1667,4 +1667,5 @@ cdef class Pico3k:
 				data[channel] = scaled_channel_data
 		#data['T'] = np.linspace(t0,t1,len(scaled_channel_data))
 		data_t = np.linspace(t0,t1,len(trigger_times))
-		return (data, data_t, overflow,trigger_times)
+		data_t1 = np.linspace(t0,t1,len(data['A'][0]))
+		return (data, data_t, data_t1, overflow,trigger_times)
