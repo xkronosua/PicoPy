@@ -336,10 +336,10 @@ cdef memorySegments(short handle, long nSegments):
 
 cdef run_block(short handle, long no_of_pretrigger_samples,
 		long no_of_posttrigger_samples, unsigned long timebase_index,
-		unsigned short segment_index, unsigned short number_of_captures):
+		unsigned short segment_index, unsigned short number_of_captures,  bint blocking=True ):
 
 	cdef PICO_STATUS status
-	cdef bint blocking = True
+	#cdef bint blocking = True
 
 	cdef long time_indisposed_ms = 0
 
@@ -384,7 +384,10 @@ cdef run_block(short handle, long no_of_pretrigger_samples,
 				break
 
 			# Sleep for another few microseconds
-			time.sleep(1e-6)
+			#time.sleep(1e-6)
+	else:
+		t1 = t0 + time_indisposed_ms*1e3
+		return t0, t1, time_indisposed_ms*1e-3
 	t1 = time.time()
 	return t0, t1, time_indisposed_ms*1e-3
 
@@ -1645,6 +1648,91 @@ cdef class Pico3k:
 		t0, t1, time_indisposed = run_block(self.__handle, self.pre_trigger_samples,
 			self.post_trigger_samples, timebase_index, segment_index, self.number_of_frames)
 
+		cdef unsigned long _downsample = self.downsample
+		cdef PS3000A_RATIO_MODE _downsample_mode = (
+				downsampling_modes[self.downsample_mode])
+
+		if self.number_of_frames == 1:
+			data, overflow, trigger_times = get_data(self.__handle,
+					data_channels, self.n_samples, _downsample, _downsample_mode)
+		else:
+			data, overflow, trigger_times = get_data_bulk(self.__handle,
+					data_channels, self.n_samples, _downsample, _downsample_mode,
+					self.number_of_frames)
+
+		stop_scope(self.__handle)
+
+		scalings = self.get_scalings()
+
+		if return_scaled_array:
+			for channel in data:
+				scaled_channel_data = data[channel] * scalings[channel]
+				data[channel] = scaled_channel_data
+		#data['T'] = np.linspace(t0,t1,len(scaled_channel_data))
+		data_t = np.linspace(t0,t1,len(trigger_times))
+		data_t1 = np.linspace(t0,t1,len(data['A'][0]))
+		return (data, data_t, data_t1, overflow,trigger_times)
+
+	def capture_prep_block_start(self, return_scaled_array=True):
+		"""Capture a block of data.
+
+		The actual sampling period is adjusted to fit a nearest valid
+		sampling period that can be found. To know in advance what will
+		be used, call the get_valid_sampling_period method with the same
+		sampling_period argument.
+
+		autotrigger_timeout is the number of seconds before the trigger
+		should fire automatically. Setting this to None or 0 means the
+		trigger will never fire automatically.
+
+		downsample_mode dictates the mode that the pico scope uses
+		to downsample the captured data and return it to the host machine.
+		For every block of length ``downsample'', 'NONE' returns
+		all samples with no downsample, 'AVERAGE' returns the average of
+		those samples, and 'DECIMATE' returns the first.
+
+		If return_scaled_array is set to False, the raw data is
+		returned without scaling it to the voltage range for each
+		channel.
+
+		"""
+		cdef unsigned long timebase_index
+		timebase_index = self.timebase
+
+		valid_sampling_period, max_samples = self.sampleInterval, self.maxSamples
+
+
+
+
+
+
+		segment_index = 0
+
+		t0, t1, time_indisposed = run_block(self.__handle, self.pre_trigger_samples,
+			self.post_trigger_samples, timebase_index, segment_index, self.number_of_frames, False)
+		return t0, t1, time_indisposed
+
+	def capture_prep_block_end(self, t0=0, t1=1, return_scaled_array=True):
+		cdef short finished = 0
+		cdef PICO_STATUS status
+		while True:
+			with nogil:
+				status = ps3000aIsReady(self.__handle, &finished)
+
+			check_status(status)
+
+			if finished:
+				break
+		data_channels = set()
+		for channel in self.__channel_states:
+			if self.__channel_states[channel][1]:
+				data_channels.add(channel)
+
+		active_channels = len(data_channels)
+
+		if active_channels == 0:
+			raise RuntimeError('No active channels: No channels have been '
+					'enabled.')
 		cdef unsigned long _downsample = self.downsample
 		cdef PS3000A_RATIO_MODE _downsample_mode = (
 				downsampling_modes[self.downsample_mode])
